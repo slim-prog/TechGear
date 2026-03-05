@@ -127,7 +127,8 @@
                 Console.WriteLine("3) Gerät sperren/entsperren (Defekt)");
                 Console.WriteLine("4) Neuen Benutzer anlegen");
                 Console.WriteLine("5) Benutzer löschen");
-                Console.WriteLine("6) Abmelden");
+                Console.WriteLine("6) Ausleih-Historie anzeigen"); // neu: Option für Historie
+                Console.WriteLine("7) Abmelden");                  // nummer geändert von 6 auf 7
                 Console.WriteLine("0) Programm beenden");
                 Console.WriteLine();
                 Console.Write("Auswahl: ");
@@ -139,27 +140,25 @@
                     case "1":
                         ShowAllDevices();
                         break;
-
                     case "2":
                         CreateNewDevice();
                         break;
-
                     case "3":
                         ToggleDeviceBlockStatus();
                         break;
-
                     case "4":
                         CreateNewUser();
                         break;
-
-                    case "5":                // <-- Cazul nou pentru ștergere utilizator
+                    case "5":                
                         DeleteUser();
                         break;
-
-                    case "6":                // <-- Cazul de abmelden a devenit 5
+                    case "6":                              // new: Historie anzeigen
+                        PrintHeader("Ausleih-Historie");
+                        Logger.ShowHistory();
+                        break;      
+                    case "7":                              // new: Abmelden ist jetzt 7
                         _currentUser = null;
                         return;
-
                     case "0":
                         Environment.Exit(0);
                         break;
@@ -320,15 +319,24 @@
             if (device.IsBlocked)
             {
                 device.UnblockDevice();
+
+                // new: Entsperrung protokollieren 
+                Logger.LogAction(_currentUser!.Username, "entsperrt (repariert)", device.Name);
+
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine($"\nGerät [{device.Id}] \"{device.Name}\" wurde erfolgreich ENTSPERRT und steht wieder zur Verfügung.");
             }
             else
             {
                 device.BlockDevice();
+
+                // new: Sperrung protokollieren 
+                Logger.LogAction(_currentUser!.Username, "gesperrt (defekt)", device.Name);
+
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"\nGerät [{device.Id}] \"{device.Name}\" wurde erfolgreich GESPERRT (z.B. Defekt).");
             }
+
 
             Console.ResetColor();
             _inventory.SaveDevicesToFile();
@@ -515,6 +523,11 @@
             selected.MarkAsBorrowed(_currentUser);
             _inventory.SaveDevicesToFile();
 
+            //new: aktion in der historie protokollieren
+            Logger.LogAction(_currentUser.Username, "ausgeliehen", selected.Name);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine();
+
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
             Console.WriteLine($"Gerät [{selected.Id}] \"{selected.Name}\" wurde erfolgreich ausgeliehen.");
@@ -558,6 +571,10 @@
 
             selected.MarkAsReturned();
             _inventory.SaveDevicesToFile();
+            //new: aktion in der historie protokollieren
+            Logger.LogAction(_currentUser.Username, "zurückgegeben", selected.Name);
+            Console.ForegroundColor= ConsoleColor.Green;
+            Console.WriteLine();
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
