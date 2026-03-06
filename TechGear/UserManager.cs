@@ -19,9 +19,8 @@
             if (!File.Exists(UserFilePath))
             {
                 // Erstellung der Standardkonten mit gehashten Passwörtern
-                _users.Add(new User("superadmin", SecurityHelper.HashPassword("superadmin"), UserRole.SuperAdmin));
-                _users.Add(new User("admin", SecurityHelper.HashPassword("admin"), UserRole.Admin));
-                _users.Add(new User("user", SecurityHelper.HashPassword("user"), UserRole.User));
+                _users.Add(new User("superadmin", "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", UserRole.SuperAdmin));
+                _users.Add(new User("admin", "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", UserRole.Admin));
                 SaveUsersToFile();
                 return;
             }
@@ -85,5 +84,43 @@
         {
             _users.Remove(user);
         }
+
+        public bool ResetUserPassword(User executingUser, string targetUsername, string newPassword)
+        {
+            // Căutăm userul căruia vrem să-i schimbăm parola
+            User? targetUser = FindByUsername(targetUsername);
+
+            if (targetUser == null)
+            {
+                return false; // Userul țintă nu a fost găsit
+            }
+
+            // --- LOGICA DE PERMISIUNI (RBAC) ---
+            if (executingUser.Role == UserRole.Admin)
+            {
+                // Un Admin are voie să schimbe parola DOAR unui User normal
+                if (targetUser.Role == UserRole.SuperAdmin || targetUser.Role == UserRole.Admin)
+                {
+                    return false; // Interzis!
+                }
+            }
+            else if (executingUser.Role != UserRole.SuperAdmin)
+            {
+                // Orice alt rol (ex. User normal) nu are ce căuta aici
+                return false;
+            }
+
+            // Dacă am ajuns aici, permisiunile sunt valide.
+            // Hash-uim noua parolă
+            string newHash = SecurityHelper.HashPassword(newPassword);
+
+            // Înlocuim utilizatorul (pentru a actualiza PasswordHash)
+            _users.Remove(targetUser);
+            _users.Add(new User(targetUser.Username, newHash, targetUser.Role));
+
+            SaveUsersToFile();
+            return true;
+        }
+
     }
 }

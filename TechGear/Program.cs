@@ -79,6 +79,7 @@
                 Console.WriteLine("6) Benutzer löschen");
                 Console.WriteLine("7) Ausleih-Historie anzeigen");
                 Console.WriteLine("8) Abmelden");
+                Console.WriteLine("R) Benutzer-Passwort zurücksetzen");     // neue Funktion
                 Console.WriteLine("0) Programm beenden");
                 Console.WriteLine();
                 Console.Write("Auswahl: ");
@@ -112,6 +113,9 @@
                     case "8":
                         _currentUser = null;
                         return;
+                    case "R":
+                        ResetPasswordMenu();
+                        break;
                     case "0":
                         Environment.Exit(0);
                         break;
@@ -314,7 +318,7 @@
             if (device.IsBlocked)
             {
                 device.UnblockDevice();
-                Logger.LogAction(_currentUser!.Username, "entsperrt (repariert)", device.Name);
+                Logger.LogEvent(_currentUser!.Username, "entsperrt (repariert)", device.Name);
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine($"\nGerät [{device.Id}] \"{device.Name}\" wurde erfolgreich ENTSPERRT und steht wieder zur Verfügung.");
@@ -322,7 +326,7 @@
             else
             {
                 device.BlockDevice();
-                Logger.LogAction(_currentUser!.Username, "gesperrt (defekt)", device.Name);
+                Logger.LogEvent(_currentUser!.Username, "gesperrt (defekt)", device.Name);
 
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"\nGerät [{device.Id}] \"{device.Name}\" wurde erfolgreich GESPERRT (z.B. Defekt).");
@@ -510,7 +514,7 @@
             selected.MarkAsBorrowed(_currentUser);
             _inventory.SaveDevicesToFile();
 
-            Logger.LogAction(_currentUser.Username, "ausgeliehen", selected.Name);
+            Logger.LogEvent(_currentUser.Username, "ausgeliehen", selected.Name);
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
@@ -556,7 +560,7 @@
             selected.MarkAsReturned();
             _inventory.SaveDevicesToFile();
 
-            // Logger.LogAction(_currentUser.Username, "zurückgegeben", selected.Name);
+            Logger.LogEvent(_currentUser.Username, "zurückgegeben", selected.Name);
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
@@ -612,6 +616,54 @@
 
             return password;
         }
+
+        private static void ResetPasswordMenu()
+        {
+            PrintHeader("Benutzer-Passwort zurücksetzen");
+
+            if (_currentUser == null) return;
+
+            Console.Write("Benutzername des Ziel-Accounts: ");
+            string? targetUsername = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(targetUsername))
+            {
+                PrintError("Benutzername darf nicht leer sein.");
+                return;
+            }
+
+            // Nu ne permitem să ne resetăm singuri parola aici (opțional, dar recomandat)
+            if (string.Equals(targetUsername, _currentUser.Username, StringComparison.OrdinalIgnoreCase))
+            {
+                PrintError("Sie können Ihr eigenes Passwort hier nicht ändern.");
+                return;
+            }
+
+            Console.Write("Neues Passwort vergeben: ");
+            string newPassword = ReadPasswordMasked();
+
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            {
+                PrintError("Das neue Passwort muss mindestens 6 Zeichen lang sein.");
+                return;
+            }
+
+            // Apelăm UserManager pentru a face resetarea, respectând ierarhia
+            bool success = _userManager.ResetUserPassword(_currentUser, targetUsername, newPassword);
+
+            if (success)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nPasswort wurde erfolgreich zurückgesetzt.");
+                Console.ResetColor();
+                /// Logger.LogEvent(_currentUser.Username, $"Passwort von '{targetUsername}' zurückgesetzt" , "sysadmin" ); // Dacă folosești Logger-ul
+            }
+            else
+            {
+                PrintError("Fehler: Benutzer nicht gefunden oder unzureichende Berechtigungen (ein Admin darf keinen SuperAdmin ändern).");
+            }
+        }
+
 
         private static void PrintHeader(string title)
         {

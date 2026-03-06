@@ -9,7 +9,7 @@
         private const string LogFilePath = "history.txt";
 
         // Protokolliert eine Aktion mit einem exakten Zeitstempel in die Historien-Datei.
-        public static void LogAction(string username, string action, string deviceName)
+        public static void LogEvent(string username, string action, string deviceName)
         {
             try
             {
