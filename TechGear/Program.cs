@@ -1,22 +1,21 @@
 ﻿namespace TechGear
 {
+    using System;
+    using System.Linq;
+
     internal class Program
     {
-        // Einfache In-Memory-Datenhaltung
-        private static readonly List<User> _users = new();
+        private static readonly UserManager _userManager = new();
         private static readonly InventoryManager _inventory = new();
         private static User? _currentUser;
-        private const string DeviceFilePath = "devices.csv";
-        private const string UserFilePath = "users.csv";
 
         private static void Main()
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             Console.Title = "TechGear IT Inventar und Ausleihsystem";
 
-            LoadUsersFromFile();
+            _userManager.LoadUsersFromFile();
             _inventory.LoadDevicesFromFile();
-
 
             while (true)
             {
@@ -26,8 +25,7 @@
                 {
                     ShowLoginScreen();
                 }
-                else if (_currentUser.Role == "SuperAdmin" || _currentUser.Role == "Admin")
-
+                else if (_currentUser.Role == UserRole.SuperAdmin || _currentUser.Role == UserRole.Admin)
                 {
                     ShowAdminMenu();
                 }
@@ -37,55 +35,7 @@
                 }
             }
         }
-        // Nur Benutzer kommen aus dem Code, nicht aus der Datei
-        private static void LoadUsersFromFile()
-        {
-            _users.Clear();
 
-            if (!File.Exists(UserFilePath))
-            {
-                // Creăm cele 3 conturi demo dacă fișierul nu există
-                _users.Add(new User("superadmin", "superadmin", "SuperAdmin"));
-                _users.Add(new User("admin", "admin", "Admin"));
-                _users.Add(new User("user", "user", "User"));
-                SaveUsersToFile();
-                return;
-            }
-
-            string[] lines = File.ReadAllLines(UserFilePath);
-
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
-                string[] parts = line.Split(';');
-                if (parts.Length < 3)
-                    continue;
-
-                string username = parts[0];
-                string password = parts[1];
-
-                // Dacă e fișier vechi (cu "True"/"False"), convertim în "Admin"/"User"
-                string role = parts[2];
-                if (role == "True") role = "Admin";
-                else if (role == "False") role = "User";
-
-                _users.Add(new User(username, password, role));
-            }
-        }
-        private static void SaveUsersToFile()
-        {
-            var lines = new List<string>();
-
-            foreach (var user in _users)
-            {
-                string line = $"{user.Username};{user.Password};{user.Role}";
-                lines.Add(line);
-            }
-
-            File.WriteAllLines(UserFilePath, lines);
-        }
         private static void ShowLoginScreen()
         {
             PrintHeader("Anmeldung");
@@ -96,9 +46,8 @@
             Console.Write("Passwort: ");
             string? password = ReadPasswordMasked();
 
-            User? found = _users.Find(u =>
-                string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase)
-                && u.Password == password);
+            // Delegierung der Validierung an den UserManager (inklusive Hashing)
+            User? found = _userManager.ValidateLogin(username ?? "", password ?? "");
 
             if (found == null)
             {
@@ -113,22 +62,23 @@
             Console.WriteLine();
             Console.WriteLine($"Erfolgreich angemeldet als: {_currentUser.Username} (Rolle: {_currentUser.Role})");
             Console.ResetColor();
-            // Keine Pause mehr – direkt zurück, Main-Schleife zeigt Menü
         }
+
         private static void ShowAdminMenu()
         {
             while (true)
             {
-                string menuTitle = _currentUser?.Role == "SuperAdmin" ? "Global Administrator-Menü" : "Admin-Menü";
+                string menuTitle = _currentUser?.Role == UserRole.SuperAdmin ? "Global Administrator-Menü" : "Admin-Menü";
                 PrintHeader(menuTitle);
 
                 Console.WriteLine("1) Alle Geräte anzeigen");
-                Console.WriteLine("2) Neues Gerät anlegen");
-                Console.WriteLine("3) Gerät sperren/entsperren (Defekt)");
-                Console.WriteLine("4) Neuen Benutzer anlegen");
-                Console.WriteLine("5) Benutzer löschen");
-                Console.WriteLine("6) Ausleih-Historie anzeigen"); // neu: Option für Historie
-                Console.WriteLine("7) Abmelden");                  // nummer geändert von 6 auf 7
+                Console.WriteLine("2) Geräte suchen");              // neue Funktion
+                Console.WriteLine("3) Neues Gerät anlegen");
+                Console.WriteLine("4) Gerät sperren/entsperren (Defekt)");
+                Console.WriteLine("5) Neuen Benutzer anlegen");
+                Console.WriteLine("6) Benutzer löschen");
+                Console.WriteLine("7) Ausleih-Historie anzeigen");
+                Console.WriteLine("8) Abmelden");
                 Console.WriteLine("0) Programm beenden");
                 Console.WriteLine();
                 Console.Write("Auswahl: ");
@@ -141,22 +91,25 @@
                         ShowAllDevices();
                         break;
                     case "2":
-                        CreateNewDevice();
+                        SearchForDevice();
                         break;
                     case "3":
-                        ToggleDeviceBlockStatus();
+                        CreateNewDevice();
                         break;
                     case "4":
+                        ToggleDeviceBlockStatus();
+                        break;
+                    case "5":
                         CreateNewUser();
                         break;
-                    case "5":                
+                    case "6":
                         DeleteUser();
                         break;
-                    case "6":                              // new: Historie anzeigen
+                    case "7":
                         PrintHeader("Ausleih-Historie");
                         Logger.ShowHistory();
-                        break;      
-                    case "7":                              // new: Abmelden ist jetzt 7
+                        break;
+                    case "8":
                         _currentUser = null;
                         return;
                     case "0":
@@ -171,6 +124,7 @@
                 WaitForKey();
             }
         }
+
         private static void ShowUserMenu()
         {
             while (true)
@@ -179,8 +133,9 @@
 
                 Console.WriteLine("1) Verfügbare Geräte anzeigen");
                 Console.WriteLine("2) Gerät ausleihen");
-                Console.WriteLine("3) Gerät zurückgeben"); // <-- Opțiune nouă
-                Console.WriteLine("4) Abmelden");          // <-- Numărul a fost schimbat
+                Console.WriteLine("3) Gerät zurückgeben");
+                Console.WriteLine("4) Geräte suchen");              // neue Funktion 
+                Console.WriteLine("5) Abmelden");
                 Console.WriteLine("0) Programm beenden");
                 Console.WriteLine();
                 Console.Write("Auswahl: ");
@@ -192,19 +147,18 @@
                     case "1":
                         ShowAvailableDevices();
                         break;
-
                     case "2":
                         BorrowDevice();
                         break;
-
-                    case "3":                // <-- Cazul nou pentru returnare
+                    case "3":
                         ReturnDevice();
                         break;
-
-                    case "4":                // <-- Cazul de abmelden a devenit 4
+                    case "4":
+                        SearchForDevice();
+                        break;
+                    case "5":
                         _currentUser = null;
                         return;
-
                     case "0":
                         Environment.Exit(0);
                         break;
@@ -217,6 +171,7 @@
                 WaitForKey();
             }
         }
+
         private static void ShowAllDevices()
         {
             PrintHeader("Alle Geräte");
@@ -232,6 +187,7 @@
                 Console.WriteLine(device);
             }
         }
+
         private static void ShowAvailableDevices()
         {
             PrintHeader("Verfügbare Geräte");
@@ -249,6 +205,44 @@
                 Console.WriteLine("Es sind aktuell keine Geräte verfügbar.");
             }
         }
+
+        private static void SearchForDevice()
+        {
+            PrintHeader("Geräte suchen");
+
+            Console.Write("Bitte geben Sie einen Suchbegriff ein (z.B. Marke, Kategorie oder [Enter] für Abbruch): ");
+            string? searchTerm = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(searchTerm))
+            {
+                Console.WriteLine("Suche abgebrochen.");
+                return;
+            }
+
+            // Wir rufen die neue Suchmethode aus dem InventoryManager auf
+            var results = _inventory.SearchDevices(searchTerm).ToList();
+
+            Console.WriteLine();
+
+            if (results.Count == 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Keine Geräte gefunden, die den Begriff '{searchTerm}' enthalten.");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"Es wurden {results.Count} Gerät(e) gefunden:");
+                Console.ResetColor();
+
+                foreach (var device in results)
+                {
+                    Console.WriteLine(device);
+                }
+            }
+        }
+
         private static void CreateNewDevice()
         {
             PrintHeader("Neues Gerät anlegen");
@@ -286,6 +280,7 @@
             Console.WriteLine("Gerät wurde erfolgreich angelegt.");
             Console.ResetColor();
         }
+
         private static void ToggleDeviceBlockStatus()
         {
             PrintHeader("Gerät sperren / entsperren");
@@ -319,8 +314,6 @@
             if (device.IsBlocked)
             {
                 device.UnblockDevice();
-
-                // new: Entsperrung protokollieren 
                 Logger.LogAction(_currentUser!.Username, "entsperrt (repariert)", device.Name);
 
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -329,26 +322,23 @@
             else
             {
                 device.BlockDevice();
-
-                // new: Sperrung protokollieren 
                 Logger.LogAction(_currentUser!.Username, "gesperrt (defekt)", device.Name);
 
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"\nGerät [{device.Id}] \"{device.Name}\" wurde erfolgreich GESPERRT (z.B. Defekt).");
             }
 
-
             Console.ResetColor();
             _inventory.SaveDevicesToFile();
         }
+
         private static void CreateNewUser()
         {
             if (_currentUser == null) return;
 
             PrintHeader("Neuen Benutzer anlegen");
 
-            // Mutăm avertismentul la începutul metodei, înainte de orice introducere de date
-            if (_currentUser.Role != "SuperAdmin")
+            if (_currentUser.Role != UserRole.SuperAdmin)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Hinweis: Als Admin können Sie nur normale Benutzer (User) anlegen.");
@@ -356,58 +346,58 @@
                 Console.WriteLine();
             }
 
-            // Modificați rândul cu Benutzername și validarea sa
             Console.Write("Benutzername (oder [Enter] für Abbruch): ");
             string? username = Console.ReadLine();
 
-            // Dacă apasă Enter și textul este gol, oprim și dăm mesaj de anulare
             if (string.IsNullOrWhiteSpace(username))
             {
                 Console.WriteLine("Vorgang abgebrochen.");
                 return;
             }
 
-            if (_users.Exists(u => string.Equals(u.Username, username.Trim(), StringComparison.OrdinalIgnoreCase)))
+            if (_userManager.UserExists(username.Trim()))
             {
                 PrintError("Ein Benutzer mit diesem Namen existiert bereits.");
                 return;
             }
 
-            // Modificați și la Parolă, pentru consecvență
             Console.Write("Passwort (oder [Enter] für Abbruch): ");
             string? password = Console.ReadLine();
+
             if (string.IsNullOrWhiteSpace(password))
             {
                 Console.WriteLine("Vorgang abgebrochen.");
                 return;
             }
 
-            string newRole = "User"; // Implicit va fi user
+            UserRole newRole = UserRole.User;
 
-            // Doar SuperAdmin primește întrebarea de a alege rolul
-            if (_currentUser.Role == "SuperAdmin")
+            if (_currentUser.Role == UserRole.SuperAdmin)
             {
                 Console.Write("Soll der Benutzer ein [A]dmin oder normaler [U]ser sein? (a/u): ");
                 string? roleInput = Console.ReadLine();
                 if (!string.IsNullOrWhiteSpace(roleInput) && roleInput.Trim().ToLower() == "a")
                 {
-                    newRole = "Admin";
+                    newRole = UserRole.Admin;
                 }
             }
 
-            _users.Add(new User(username.Trim(), password.Trim(), newRole));
-            SaveUsersToFile();
+            // Passwort vor dem Speichern hashen
+            string hashedPassword = SecurityHelper.HashPassword(password.Trim());
+            _userManager.AddUser(new User(username.Trim(), hashedPassword, newRole));
+            _userManager.SaveUsersToFile();
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"\nBenutzer '{username.Trim()}' (Rolle: {newRole}) wurde erfolgreich angelegt.");
             Console.ResetColor();
         }
+
         private static void DeleteUser()
         {
             PrintHeader("Benutzer löschen");
 
             Console.WriteLine("Liste aller aktuellen Benutzer:");
-            foreach (var user in _users)
+            foreach (var user in _userManager.Users)
             {
                 Console.WriteLine($"- {user.Username} ({user.Role})");
             }
@@ -423,14 +413,7 @@
             }
 
             targetUsername = targetUsername.Trim();
-            var userToDelete = _users.Find(u => string.Equals(u.Username, targetUsername, StringComparison.OrdinalIgnoreCase));
-            // Un Admin simplu nu are voie să șteargă un alt Admin sau un SuperAdmin
-            if (_currentUser?.Role == "Admin" && (userToDelete!.Role == "Admin" || userToDelete!.Role == "SuperAdmin"))
-            {
-                PrintError("Fehlende Berechtigung: Sie können als Admin keine anderen Administratoren oder SuperAdmins löschen.");
-                return;
-            }
-
+            var userToDelete = _userManager.FindByUsername(targetUsername);
 
             if (userToDelete == null)
             {
@@ -438,14 +421,19 @@
                 return;
             }
 
-            // Prevenim situația în care administratorul se șterge pe sine însuși
+            // Strikte typsichere Berechtigungsprüfung mit Enum
+            if (_currentUser?.Role == UserRole.Admin && (userToDelete.Role == UserRole.Admin || userToDelete.Role == UserRole.SuperAdmin))
+            {
+                PrintError("Fehlende Berechtigung: Sie können als Admin keine anderen Administratoren oder SuperAdmins löschen.");
+                return;
+            }
+
             if (string.Equals(userToDelete.Username, _currentUser?.Username, StringComparison.OrdinalIgnoreCase))
             {
                 PrintError("Sie können sich nicht selbst löschen.");
                 return;
             }
 
-            // Verificăm dacă utilizatorul are echipamente împrumutate
             bool hasBorrowedDevices = _inventory.Devices.Any(d => string.Equals(d.BorrowedBy, userToDelete.Username, StringComparison.OrdinalIgnoreCase));
 
             if (hasBorrowedDevices)
@@ -454,14 +442,13 @@
                 return;
             }
 
-            // Confirmare finală înainte de ștergere
             Console.Write($"Möchten Sie den Benutzer '{userToDelete.Username}' wirklich löschen? (j/n): ");
             string? confirmation = Console.ReadLine();
 
             if (!string.IsNullOrWhiteSpace(confirmation) && confirmation.Trim().ToLower() == "j")
             {
-                _users.Remove(userToDelete);
-                SaveUsersToFile(); // Salvăm modificarea în fișier
+                _userManager.RemoveUser(userToDelete);
+                _userManager.SaveUsersToFile();
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine();
@@ -473,10 +460,10 @@
                 Console.WriteLine("Löschvorgang abgebrochen.");
             }
         }
+
         private static void BorrowDevice()
         {
-            if (_currentUser == null)
-                return;
+            if (_currentUser == null) return;
 
             PrintHeader("Gerät ausleihen");
 
@@ -523,20 +510,17 @@
             selected.MarkAsBorrowed(_currentUser);
             _inventory.SaveDevicesToFile();
 
-            //new: aktion in der historie protokollieren
             Logger.LogAction(_currentUser.Username, "ausgeliehen", selected.Name);
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine();
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
             Console.WriteLine($"Gerät [{selected.Id}] \"{selected.Name}\" wurde erfolgreich ausgeliehen.");
             Console.ResetColor();
         }
+
         private static void ReturnDevice()
         {
-            if (_currentUser == null)
-                return;
+            if (_currentUser == null) return;
 
             PrintHeader("Gerät zurückgeben");
 
@@ -571,39 +555,32 @@
 
             selected.MarkAsReturned();
             _inventory.SaveDevicesToFile();
-            //new: aktion in der historie protokollieren
-            Logger.LogAction(_currentUser.Username, "zurückgegeben", selected.Name);
-            Console.ForegroundColor= ConsoleColor.Green;
-            Console.WriteLine();
+
+            // Logger.LogAction(_currentUser.Username, "zurückgegeben", selected.Name);
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine();
             Console.WriteLine($"Gerät [{selected.Id}] \"{selected.Name}\" wurde erfolgreich zurückgegeben.");
             Console.ResetColor();
         }
+
         private static int ReadInt()
         {
             while (true)
             {
                 string? input = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(input)) return -1;
 
-                // Dacă utilizatorul nu introduce nimic (apasă doar Enter), considerăm că vrea să anuleze
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    return -1; // -1 va semnifica "Abbruch" în logica noastră
-                }
-
-                // Dacă a introdus ceva, verificăm dacă este număr valid
                 if (!int.TryParse(input, out int value))
                 {
                     PrintError("Bitte eine gültige ganze Zahl eingeben (oder [Enter] drücken zum Abbrechen).");
                     Console.Write("Eingabe wiederholen: ");
                     continue;
                 }
-
                 return value;
             }
         }
+
         private static string ReadPasswordMasked()
         {
             var password = string.Empty;
@@ -635,20 +612,36 @@
 
             return password;
         }
+
         private static void PrintHeader(string title)
         {
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("========================================");
-            Console.WriteLine("              TechGear                  ");
+            Console.WriteLine("                TechGear                ");
             Console.WriteLine("========================================");
-            Console.WriteLine("      IT Inventar und Ausleihsystem     ");
+            Console.WriteLine("     IT Inventar und Ausleihsystem      ");
             Console.WriteLine("========================================");
             Console.ResetColor();
-            Console.WriteLine(title);
-            Console.WriteLine(new string('-', title.Length));
+            Console.WriteLine();
+
+            int totalWidth = 40;
+            int spacesToCenter = (totalWidth - title.Length) / 2;
+
+            if (spacesToCenter > 0)
+            {
+                string padding = new string(' ', spacesToCenter);
+                Console.WriteLine($"{padding}{title}");
+                Console.WriteLine($"{padding}{new string('-', title.Length)}");
+            }
+            else
+            {
+                Console.WriteLine(title);
+                Console.WriteLine(new string('-', title.Length));
+            }
             Console.WriteLine();
         }
+
         private static void PrintError(string message)
         {
             var old = Console.ForegroundColor;
@@ -657,6 +650,7 @@
             Console.WriteLine(message);
             Console.ForegroundColor = old;
         }
+
         private static void WaitForKey()
         {
             Console.WriteLine();
