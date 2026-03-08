@@ -1,6 +1,7 @@
 ﻿namespace TechGear
 {
     using System;
+    using System.IO;
     using System.Linq;
 
     internal class Program
@@ -188,7 +189,7 @@
 
             foreach (var device in _inventory.Devices)
             {
-                Console.WriteLine(device);
+                PrintDeviceColored(device);
             }
         }
 
@@ -200,7 +201,7 @@
 
             foreach (var device in _inventory.GetAvailableDevices())
             {
-                Console.WriteLine(device);
+                PrintDeviceColored(device);
                 foundAny = true;
             }
 
@@ -242,7 +243,7 @@
 
                 foreach (var device in results)
                 {
-                    Console.WriteLine(device);
+                    PrintDeviceColored(device);
                 }
             }
         }
@@ -474,7 +475,7 @@
             bool foundAny = false;
             foreach (var device in _inventory.GetAvailableDevices())
             {
-                Console.WriteLine(device);
+                PrintDeviceColored(device);
                 foundAny = true;
             }
 
@@ -520,6 +521,7 @@
             Console.WriteLine();
             Console.WriteLine($"Gerät [{selected.Id}] \"{selected.Name}\" wurde erfolgreich ausgeliehen.");
             Console.ResetColor();
+
         }
 
         private static void ReturnDevice()
@@ -664,7 +666,6 @@
             }
         }
 
-
         private static void PrintHeader(string title)
         {
             Console.Clear();
@@ -709,5 +710,46 @@
             Console.Write("Weiter mit beliebiger Taste...");
             Console.ReadKey(intercept: true);
         }
+
+        private static void PrintDeviceColored(Device device)
+        {
+            // Printează ID-ul cu Cyan
+            Console.Write("[");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.Write(device.Id);
+            Console.ResetColor();
+            Console.Write($"] {device.Name} ({device.Category}) - Status: ");
+
+            // Printează Starea cu culoarea potrivită
+            if (device.IsBlocked)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("GESPERRT");
+            }
+            // Dacă NU este disponibil și NU este blocat, înseamnă că este împrumutat
+            else if (!device.IsAvailable)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                // Verificăm dacă știm la cine este (BorrowedBy)
+                if (!string.IsNullOrEmpty(device.BorrowedBy))
+                {
+                    Console.WriteLine($"AUSGELIEHEN (von {device.BorrowedBy})");
+                }
+                else
+                {
+                    Console.WriteLine("AUSGELIEHEN");
+                }
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("VERFÜGBAR");
+            }
+
+            Console.ResetColor(); // Ne asigurăm că setăm culoarea la loc
+        }
+
+
+
     }
 }
