@@ -3,6 +3,8 @@
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Text;
+
     // Verwaltet alle Benutzeroperationen und die Persistenz der Benutzerdaten.
     internal class UserManager
     {
@@ -18,7 +20,7 @@
 
             if (!File.Exists(UserFilePath))
             {
-                // Erstellung der Standardkonten mit gehashten Passwörtern
+                // Erstelle Standard-Benutzer...
                 _users.Add(new User("superadmin", "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", UserRole.SuperAdmin));
                 _users.Add(new User("admin", "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918", UserRole.Admin));
                 SaveUsersToFile();
@@ -31,20 +33,61 @@
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                string[] parts = line.Split(';');
-                if (parts.Length < 3) continue;
+                // Parsing mit Unterstützung für escaped fields
+                var parts = ParseCsvLine(line);
+
+                if (parts.Length != 3) continue;
 
                 string username = parts[0];
                 string passwordHash = parts[1];
+                string roleString = parts[2];
 
-                // Typsichere Umwandlung des Strings in den Enum
-                if (!Enum.TryParse(parts[2], true, out UserRole role))
+                if (!Enum.TryParse(roleString, true, out UserRole role))
                 {
-                    role = UserRole.User; // Fallback für fehlerhafte Einträge
+                    role = UserRole.User;
                 }
 
                 _users.Add(new User(username, passwordHash, role));
             }
+        }
+
+        // Hilfsmethode zum Parsen von CSV-Zeilen mit Escape-Unterstützung
+        private static string[] ParseCsvLine(string line)
+        {
+            var fields = new List<string>();
+            var currentField = new StringBuilder();
+            bool insideQuotes = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+
+                if (c == '"')
+                {
+                    if (insideQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        // Doppeltes Anführungszeichen "" bedeutet ein literales Anführungszeichen
+                        currentField.Append('"');
+                        i++; // Nächstes Anführungszeichen überspringen
+                    }
+                    else
+                    {
+                        insideQuotes = !insideQuotes;
+                    }
+                }
+                else if (c == ';' && !insideQuotes)
+                {
+                    fields.Add(currentField.ToString());
+                    currentField.Clear();
+                }
+                else
+                {
+                    currentField.Append(c);
+                }
+            }
+
+            fields.Add(currentField.ToString());
+            return fields.ToArray();
         }
 
         public void SaveUsersToFile()
@@ -53,10 +96,28 @@
 
             foreach (var user in _users)
             {
-                lines.Add($"{user.Username};{user.PasswordHash};{user.Role}");
+                // Escapen: Wenn Benutzername oder PasswordHash `;` oder `"` enthalten, umgeben wir sie mit Anführungszeichen
+                string escapedUsername = EscapeCsvField(user.Username);
+                string escapedPasswordHash = EscapeCsvField(user.PasswordHash);
+                string roleString = user.Role.ToString();
+
+                string line = $"{escapedUsername};{escapedPasswordHash};{roleString}";
+                lines.Add(line);
             }
 
             File.WriteAllLines(UserFilePath, lines);
+        }
+
+        // Hilfsmethode für CSV-Escaping
+        private static string EscapeCsvField(string field)
+        {
+            // Wenn das Feld `;`, `"`, oder Zeilenumbruch enthält, umgeben wir es mit Anführungszeichen
+            if (field.Contains(";") || field.Contains("\"") || field.Contains("\n"))
+            {
+                // Escapen Sie doppelte Anführungszeichen durch Verdopplung: " → ""
+                return $"\"{field.Replace("\"", "\"\"")}\"";
+            }
+            return field;
         }
 
         public User? ValidateLogin(string username, string password)

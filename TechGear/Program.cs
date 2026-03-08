@@ -12,7 +12,7 @@
         private static void Main()
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
-            Console.Title = "TechGear IT Inventar und Ausleihsystem";
+            Console.Title = "TechGear";
 
             _userManager.LoadUsersFromFile();
             _inventory.LoadDevicesFromFile();
