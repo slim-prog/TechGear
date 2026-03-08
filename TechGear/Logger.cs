@@ -32,7 +32,7 @@
             }
         }
 
-        // Liest die Log-Datei aus und gibt alle Einträge in der Konsole aus.
+        // Liest die Log-Datei aus und gibt alle Einträge in der Konsole aus
         public static void ShowHistory()
         {
             if (!File.Exists(LogFilePath))
@@ -43,8 +43,7 @@
 
             try
             {
-                // File.ReadLines ist speichereffizienter als File.ReadAllLines, 
-                // da es einen IEnumerable zurückgibt und nicht das gesamte Array in den RAM lädt.
+                // File.ReadLines ist speichereffizienter als File.ReadAllLines da es einen IEnumerable zurückgibt und nicht das gesamte Array in den RAM lädt
                 foreach (var line in File.ReadLines(LogFilePath))
                 {
                     Console.WriteLine(line);
